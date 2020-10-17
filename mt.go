@@ -328,7 +328,7 @@ func GenerateScreenshots(fn string) []image.Image {
 	return thumbnails
 }
 
-func makeContactSheet(thumbs []image.Image, fn string) {
+func makeContactSheet(thumbs []image.Image, fn string, name string) {
 	log.Info("Composing Contact Sheet")
 	imgWidth := thumbs[0].Bounds().Dx()
 	imgHeight := thumbs[0].Bounds().Dy()
@@ -386,7 +386,7 @@ func makeContactSheet(thumbs []image.Image, fn string) {
 
 	if viper.GetBool("header") {
 		log.Info("appending header informations")
-		head := appendHeader(dst)
+		head := appendHeader(dst, name)
 		newIm := imaging.New(dst.Bounds().Dx(), dst.Bounds().Dy()+head.Bounds().Dy(), bgColor)
 		dst = imaging.Paste(newIm, dst, image.Pt(0, head.Bounds().Dy()))
 		dst = imaging.Paste(dst, head, image.Pt(0, 0))
@@ -412,7 +412,7 @@ func makeContactSheet(thumbs []image.Image, fn string) {
 
 }
 
-func appendHeader(im image.Image) image.Image {
+func appendHeader(im image.Image, name string) image.Image {
 	var timestamped image.Image
 
 	font, err := freetype.ParseFont(fontBytes)
@@ -434,7 +434,7 @@ func appendHeader(im image.Image) image.Image {
 
 	// get width and height of the string and draw an image to hold it
 	//x, y, _ := c.MeasureString(timestamp)
-	header := createHeader(mpath)
+	header := createHeader(mpath, name)
 
 	rgba := image.NewNRGBA(image.Rect(0, 0, im.Bounds().Dx(), (5+int(c.PointToFix32(float64(viper.GetInt("font_size")+4))>>8)*len(header))+10))
 	draw.Draw(rgba, rgba.Bounds(), bg, image.ZP, draw.Src)
@@ -473,7 +473,7 @@ func appendHeader(im image.Image) image.Image {
 	return rgba
 }
 
-func createHeader(fn string) []string {
+func createHeader(fn string, name string) []string {
 
 	var header []string
 	var fname, fsize string
@@ -511,6 +511,11 @@ func createHeader(fn string) []string {
 			fname = params["filename"] // prefer filename to the name split from url
 		}
 	}
+
+	if name != "" {
+		fname = name
+	}
+
 	fsize = fmt.Sprintf("File Size: %s", fsize)
 	fname = fmt.Sprintf("File Name: %s", fname)
 
@@ -708,6 +713,9 @@ func main() {
 	flag.Bool("skip-credits", viper.GetBool("skip_credits"), "tries to skip ending credits from screencap creation by cutting off 4 minutes or 10 percent of the clip (defaults to false)")
 	viper.BindPFlag("skip_credits", flag.Lookup("skip-credits"))
 
+	flag.StringToString("input", viper.GetStringMapString("input"), "filepath=filename")
+	viper.BindPFlag("input", flag.Lookup("input"))
+
 	viper.AutomaticEnv()
 
 	viper.SetConfigType("json")
@@ -775,10 +783,10 @@ NOTE: fancy has best results if it is applied as last filter!
 		os.Exit(1)
 	}
 
-	if len(flag.Args()) == 0 && !viper.GetBool("show_config") {
-		flag.Usage()
-		os.Exit(1)
-	}
+	// if len(flag.Args()) == 0 && !viper.GetBool("show_config") {
+	// 	flag.Usage()
+	// 	os.Exit(1)
+	// }
 
 	if viper.GetBool("verbose") {
 		log.SetLevel(log.DebugLevel)
@@ -815,9 +823,10 @@ NOTE: fancy has best results if it is applied as last filter!
 		os.Exit(1)
 	}
 
-	for _, movie := range flag.Args() {
+	input := viper.GetStringMapString("input")
+	for movie, name := range input {
 		mpath = movie
-		log.Infof("generating contact sheet for %s", movie)
+		log.Infof("generating contact sheet for %s - %s", movie, name)
 		log.Debugf("image will be saved as %s", getSavePath(movie, 0))
 
 		var thumbs []image.Image
@@ -832,7 +841,7 @@ NOTE: fancy has best results if it is applied as last filter!
 
 		thumbs = GenerateScreenshots(movie)
 		if len(thumbs) > 0 {
-			makeContactSheet(thumbs, getSavePath(movie, 0))
+			makeContactSheet(thumbs, getSavePath(movie, 0), name)
 		}
 
 	}
